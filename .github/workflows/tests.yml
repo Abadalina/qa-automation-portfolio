@@ -34,11 +34,11 @@ jobs:
             browser: webkit    # iPhone 13 is emulated on WebKit
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # npm ci installs exactly what the lockfile pins - reproducible, unlike
@@ -61,7 +61,7 @@ jobs:
       # precisely when it is needed.
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report-${{ matrix.project }}
           path: playwright-report/
@@ -69,7 +69,7 @@ jobs:
 
       - name: Upload Allure results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: allure-results-${{ matrix.project }}
           path: allure-results/
@@ -84,14 +84,14 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Download all Allure results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: allure-results-*
           merge-multiple: true
@@ -100,7 +100,7 @@ jobs:
       # Keeps the history folder from the published report so Allure can draw
       # trends across runs instead of starting from scratch every time.
       - name: Restore previous report history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         continue-on-error: true
         with:
           ref: gh-pages
