@@ -1,0 +1,120 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Every Monday at 06:00 UTC. The suite runs against live demo sites, so a
+    # scheduled run detects changes in those sites even when nobody touches
+    # this repository.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Playwright (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      # Do not cancel the whole matrix when one project fails - a Firefox-only
+      # failure is exactly the information we want from the other legs.
+      fail-fast: false
+      matrix:
+        include:
+          - project: api
+            browser: ''        # API tests need no browser
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: mobile
+            browser: webkit    # iPhone 13 is emulated on WebKit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # npm ci installs exactly what the lockfile pins - reproducible, unlike
+      # npm install which may resolve newer versions.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      # Only the browser this leg actually needs, instead of all three.
+      - name: Install Playwright browser
+        if: matrix.browser != ''
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run tests
+        run: npx playwright test --project=${{ matrix.project }}
+
+      # if: always() uploads the report when the suite fails too, which is
+      # precisely when it is needed.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.project }}
+          path: allure-results/
+          retention-days: 14
+
+  report:
+    name: Publish Allure report
+    needs: test
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download all Allure results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          merge-multiple: true
+          path: allure-results
+
+      # Keeps the history folder from the published report so Allure can draw
+      # trends across runs instead of starting from scratch every time.
+      - name: Restore previous report history
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Copy history
+        run: |
+          if [ -d gh-pages/history ]; then cp -r gh-pages/history allure-results/history; fi
+
+      - name: Generate Allure report
+        run: npm ci && npm run allure:generate
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-report
